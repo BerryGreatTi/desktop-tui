@@ -5,6 +5,9 @@ Desktop-TUI 🖥️
 ![GitHub Release](https://img.shields.io/github/v/release/julien-cpsn/desktop-tui?link=https%3A%2F%2Fgithub.com%2FJulien-cpsn%2Fdesktop-tuiC%2Freleases%2Flatest)
 [![Crates.io](https://repology.org/badge/version-for-repo/crates_io/desktop-tui.svg)](https://crates.io/crates/desktop-tui)
 
+> [!WARNING]
+> This is an experimental project made in 2 days. It is not meant to be used as is nor to become the new desktop environnement standard. Feel free to fork and send PRs
+
 A desktop environment without graphics (tmux-like).
 
 Features:
