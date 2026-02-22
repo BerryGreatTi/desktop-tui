@@ -22,7 +22,7 @@ pub struct MyDesktop {
     pub app_menues: Vec<Handle<Menu>>,
     pub app_menu_buttons: Vec<Handle<MenuButton>>,
     pub shortcuts: Vec<Shortcut>,
-    pub app_windows: HashMap<usize, Handle<TuiWindow>>,
+    pub app_windows: HashMap<usize, Vec<Handle<TuiWindow>>>,
     pub time_label: Handle<appbar::Label>,
 }
 
@@ -56,7 +56,7 @@ impl MyDesktop {
         )?;
 
         let win_handle = self.add_window(window);
-        self.app_windows.insert(index, win_handle);
+        self.app_windows.entry(index).or_default().push(win_handle);
 
         Ok(())
     }
@@ -149,9 +149,11 @@ impl MenuEvents for MyDesktop {
     fn on_command(&mut self, menu: Handle<Menu>, item: Handle<Command>, command: Commands) {
         match command {
             Commands::Exit => {
-                for window in self.app_windows.clone().values() {
-                    if let Some(win) = self.window_mut(*window) {
-                        win.close_command();
+                for windows in self.app_windows.clone().values() {
+                    for window in windows {
+                        if let Some(win) = self.window_mut(*window) {
+                            win.close_command();
+                        }
                     }
                 }
 
@@ -167,71 +169,65 @@ impl MenuEvents for MyDesktop {
                 }
 
                 if let Some(index) = app {
-                    let win_handle = match self.app_windows.get(&index) {
-                        Some(win_handle) => Some(*win_handle),
-                        None => {
-                            match command {
-                                Commands::OpenApp => {
-                                    let command = self.shortcuts[index].command.clone();
-                                    let args = self.shortcuts[index].args.clone();
-                                    self.create_window(index, command, args).ok();
-                                },
-                                Commands::AppCommand => {
-                                    let shortcut = self.shortcuts[index].clone();
-                                    let item = self.menuitem_mut(menu, item).unwrap();
+                    match command {
+                        Commands::OpenApp => {
+                            let cmd = self.shortcuts[index].command.clone();
+                            let args = self.shortcuts[index].args.clone();
+                            self.create_window(index, cmd, args).ok();
+                        },
+                        Commands::AppCommand => {
+                            let shortcut = self.shortcuts[index].clone();
+                            let item = self.menuitem_mut(menu, item).unwrap();
 
-                                    for command in shortcut.taskbar.additional_commands {
-                                        if item.caption() == command.name {
-                                            self.create_window(index, command.command, command.args).ok();
-                                            break;
+                            for cmd in shortcut.taskbar.additional_commands {
+                                if item.caption() == cmd.name {
+                                    self.create_window(index, cmd.command, cmd.args).ok();
+                                    break;
+                                }
+                            }
+                        },
+                        Commands::CloseApp => {
+                            if let Some(windows) = self.app_windows.remove(&index) {
+                                for win_handle in windows {
+                                    if let Some(win) = self.window_mut(win_handle) {
+                                        win.close_command();
+                                    }
+                                }
+                            }
+                        },
+                        Commands::AppVisibilityToggle => {
+                            let mut visibility_item = None;
+
+                            if let Some(windows) = self.app_windows.get(&index).cloned() {
+                                let mut first = true;
+                                for win_handle in windows {
+                                    if let Some(window) = self.window_mut(win_handle) {
+                                        if first {
+                                            if window.is_visible() {
+                                                window.set_visible(false);
+                                                visibility_item = Some("Show");
+                                            } else {
+                                                window.set_visible(true);
+                                                visibility_item = Some("Hide");
+                                            }
+                                            first = false;
+                                        } else {
+                                            match visibility_item {
+                                                Some("Show") => window.set_visible(false),
+                                                Some("Hide") => window.set_visible(true),
+                                                _ => {}
+                                            }
                                         }
                                     }
-                                },
-                                _ => {}
-                            }
-
-                            None
-                        }
-                    };
-
-                    let mut visibility_item = None;
-
-                    if let Some(win_handle) = win_handle {
-                        if let Some(window) = self.window_mut(win_handle) {
-                            match command {
-                                Commands::AppVisibilityToggle => match window.is_visible() {
-                                    true => {
-                                        window.set_visible(false);
-                                        visibility_item = Some("Show");
-                                    },
-                                    false => {
-                                        window.set_visible(true);
-                                        visibility_item = Some("Hide");
-                                    }
                                 }
-                                Commands::OpenApp => {}
-                                Commands::CloseApp => {
-                                    window.close_command();
-                                    self.app_windows.remove(&index);
-                                }
-                                _ => {}
                             }
-                        }
-                        else {
-                            match command {
-                                Commands::OpenApp => {
-                                    let command = self.shortcuts[index].command.clone();
-                                    let args = self.shortcuts[index].args.clone();
-                                    self.create_window(index, command, args).ok();
-                                },
-                                _ => {}
-                            }
-                        }
-                    }
 
-                    if let Some(name) = visibility_item {
-                        let item = self.menuitem_mut(menu, item).unwrap();
-                        item.set_caption(name);
+                            if let Some(name) = visibility_item {
+                                let item = self.menuitem_mut(menu, item).unwrap();
+                                item.set_caption(name);
+                            }
+                        },
+                        _ => {}
                     }
                 }
             }
